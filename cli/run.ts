@@ -435,20 +435,23 @@ export async function init(desiredInstallDir: string | null) {
 async function reinstall_everything(install_dir: string, codeGenJson: CodeGenJson) {
   console.log("Installing dependencies from " + chalk.yellow("elm.codegen.json"))
 
-  const emptyCodeGenJson = codeGenJsonDefault()
-
   // Make sure ./Gen exists
   fs.mkdirSync(path.join(install_dir, "Gen"), { recursive: true })
   // Remove everything from it if there is anything
   // clear(path.join(install_dir, "Gen"))
 
-  for (let [key, version] of Object.entries(codeGenJson.dependencies.packages)) {
-    // `version` is a string
-    // install_package returns a new CodeGenJson,
-    // but we already know it should be exactly like the one we have
-
-    // @ts-ignore
-    await install_package(key, install_dir, version, emptyCodeGenJson)
+  // Fetch all package docs in parallel, then generate bindings
+  const packages = Object.entries(codeGenJson.dependencies.packages)
+  if (packages.length > 0) {
+    const docsResults = await Promise.all(
+      packages.map(async ([pkg, version]) => {
+        const docs = await get_docs(pkg, version)
+        return { pkg, version, docs }
+      })
+    )
+    for (const { pkg, version, docs } of docsResults) {
+      await run_package_generator(install_dir, { docs })
+    }
   }
 
   // Add the runner helper file
