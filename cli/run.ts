@@ -34,6 +34,24 @@ globalThis["XMLHttpRequest"] = XMLHttpRequest.XMLHttpRequest
 
 const currentVersion = require("../package.json").version
 
+// Write a file only if its contents have changed.
+// This avoids updating the file's mtime unnecessarily, which helps the Elm compiler's
+// incremental compilation optimizations (it uses mtime to detect changes).
+function writeFileIfChanged(filePath: string, contents: string): boolean {
+  if (fs.existsSync(filePath)) {
+    const existing = fs.readFileSync(filePath, "utf8")
+    if (existing === contents) {
+      return false // No change, file not touched
+    }
+  }
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  fs.writeFileSync(filePath, contents)
+  return true // File was written
+}
+
 async function httpsGetJson(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     https
@@ -99,8 +117,7 @@ async function run_generator(output_dir: string, moduleName: string, elm_source:
     const files = await promise
     for (const file of files) {
       const fullpath = path.join(output_dir, file.path)
-      fs.mkdirSync(path.dirname(fullpath), { recursive: true })
-      fs.writeFileSync(fullpath, file.contents)
+      writeFileIfChanged(fullpath, file.contents)
 
       if (file.warnings && file.warnings.length > 0) {
         console.log(format_title(`ELM CODEGEN WARNING`))
@@ -219,8 +236,7 @@ async function run_package_generator(output: string, flags: any) {
     .then((files: any) => {
       for (const file of files) {
         const fullpath = path.join(output, file.path)
-        fs.mkdirSync(path.dirname(fullpath), { recursive: true })
-        fs.writeFileSync(fullpath, file.contents)
+        writeFileIfChanged(fullpath, file.contents)
       }
     })
     .catch((reason) => {
@@ -437,8 +453,7 @@ async function reinstall_everything(install_dir: string, codeGenJson: CodeGenJso
 
   // Add the runner helper file
   const genFolderPath = path.join(install_dir, "Gen", "CodeGen")
-  fs.mkdirSync(genFolderPath, { recursive: true })
-  fs.writeFileSync(path.join(genFolderPath, "Generate.elm"), templates.init.codegenProgram())
+  writeFileIfChanged(path.join(genFolderPath, "Generate.elm"), templates.init.codegenProgram())
 
   // Install all dependencies
   const elmSources = []
@@ -487,6 +502,43 @@ function clear(dir: string) {
 
 function isLocal(pkg: string) {
   return pkg.endsWith(".json") || pkg.endsWith(path.sep) || pkg.endsWith(".elm")
+}
+
+// Copy a file only if source is newer than target.
+// Uses mtime comparison since that's what the Elm compiler uses for change detection.
+function copyFileIfChanged(sourcePath: string, targetPath: string): boolean {
+  if (fs.existsSync(targetPath)) {
+    const sourceStat = fs.statSync(sourcePath)
+    const targetStat = fs.statSync(targetPath)
+    if (sourceStat.mtimeMs <= targetStat.mtimeMs) {
+      return false // target is up-to-date
+    }
+  }
+  const dir = path.dirname(targetPath)
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  fs.copyFileSync(sourcePath, targetPath)
+  return true
+}
+
+function copyHelpers(codeGenJson: CodeGenJson, options: Options) {
+  // create output directory if it doesn't exist
+  fs.mkdirSync(options.output, { recursive: true })
+  // copy over all local dependencies (only if changed)
+  for (const item of codeGenJson.dependencies.local) {
+    if (item.endsWith(".elm")) {
+      copyFileIfChanged(item, path.join(options.output, item))
+    } else if (item.endsWith(path.sep)) {
+      if (fs.existsSync(item)) {
+        getFilesWithin(item, ".elm").forEach((elmPath) => {
+          const relative = path.relative(item, elmPath)
+          const targetFilePath = path.join(options.output, relative)
+          copyFileIfChanged(elmPath, targetFilePath)
+        })
+      }
+    }
+  }
 }
 
 export type InstallOptions = {
