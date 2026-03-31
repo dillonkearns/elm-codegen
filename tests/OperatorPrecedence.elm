@@ -1,8 +1,12 @@
-module OperatorPrecedence exposing (get, operators)
+module OperatorPrecedence exposing (get, operators, pipes)
 
 import Elm
 import Elm.Annotation as Type
+import Elm.Arg
+import Elm.Case
 import Elm.Expect
+import Elm.ToString
+import Expect
 import Elm.Op exposing (equal, multiply, or, plus)
 import Test exposing (Test, describe, test)
 
@@ -110,4 +114,95 @@ operators =
             \_ ->
                 or (or two three) five
                     |> Elm.Expect.renderedAs "(2 || 3) || 5"
+        ]
+
+
+pipes : Test
+pipes =
+    describe "Operators in nested contexts"
+        [ test "Operator with multi-line right operand wraps in parens" <|
+            \_ ->
+                -- The bug: when an operator's right operand is a multi-line
+                -- expression (like a case expression), the right operand
+                -- renders at wrong indentation without parens:
+                --     'f' >=
+                -- case Just ... of   <-- less indented, parse error!
+                --
+                -- Fix: wrap multi-line right operands in parens.
+                Elm.Op.gte
+                    (Elm.char 'f')
+                    (Elm.Case.maybe (Elm.just (Elm.bool True))
+                        { nothing = Elm.char 'm'
+                        , just = ( "val", \_ -> Elm.char 'v' )
+                        }
+                    )
+                    |> Elm.Expect.renderedAs
+                        """'f' >= (case Just True of
+            Nothing ->
+                'm'
+
+            Just val ->
+                'v')"""
+        , test "Comparison in case branch doesn't break across lines" <|
+            \_ ->
+                -- Reproduced from property test seed 2, Test13:
+                -- a comparison inside a case branch breaks across lines
+                -- with the right operand at wrong indentation.
+                -- The bug is triggered by the type inference error
+                -- (Nothing returns Char, Just returns Bool) which causes
+                -- the annotation to be omitted, changing the layout.
+                let
+                    file =
+                        Elm.file [ "Test" ]
+                            [ Elm.declaration "value1300"
+                                (Elm.Case.maybe (Elm.just (Elm.bool True))
+                                    { nothing = Elm.char 'e'
+                                    , just =
+                                        ( "mV0x123"
+                                        , \_ ->
+                                            Elm.Op.lt (Elm.char 'j') (Elm.char 'y')
+                                        )
+                                    }
+                                )
+                            , Elm.declaration "value1301"
+                                (Elm.Op.plus (Elm.int 65) (Elm.int -134))
+                            , Elm.alias "Record"
+                                (Type.record
+                                    [ ( "alpha", Type.char )
+                                    , ( "beta", Type.unit )
+                                    , ( "gamma", Type.float )
+                                    , ( "delta", Type.bool )
+                                    ]
+                                )
+                            , Elm.declaration "record"
+                                (Elm.record
+                                    [ ( "alpha", Elm.char 'z' )
+                                    , ( "beta", Elm.unit )
+                                    , ( "gamma", Elm.float 758.45 )
+                                    , ( "delta", Elm.bool True )
+                                    ]
+                                )
+                            ]
+
+                    hasOrphanedOperator =
+                        file.contents
+                            |> String.lines
+                            |> List.any
+                                (\line ->
+                                    let
+                                        trimmed =
+                                            String.trimRight line
+                                    in
+                                    String.endsWith " <" trimmed
+                                        || String.endsWith " >" trimmed
+                                        || String.endsWith " >=" trimmed
+                                        || String.endsWith " <=" trimmed
+                                )
+                in
+                if hasOrphanedOperator then
+                    Expect.fail
+                        ("Operator orphaned at end of line:\n" ++ file.contents)
+
+                else
+                    Expect.pass
         ]

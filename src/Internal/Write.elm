@@ -1063,8 +1063,36 @@ prettyOperatorApplication aliases indent symbol dir (Node _ exprl) (Node _ exprr
         ( left, breakLeft ) =
             prettyExpressionInner aliases { precedence = lprec } indent exprl
 
-        ( right, breakRight ) =
+        ( rightRaw, breakRight ) =
             prettyExpressionInner aliases { precedence = rprec } indent exprr
+
+        -- Lambda expressions need parens on the right side of operators
+        -- because `a |> \x -> b |> \y -> c` is ambiguous.
+        -- Multi-line expressions (like case expressions) need parens
+        -- because the pretty printer can break the line after the operator,
+        -- leaving the right operand at wrong indentation.
+        -- Even simple expressions need parens when a parent context
+        -- forces line breaks (e.g. inside a case branch), because the
+        -- `align` + `group` interaction can place the right operand
+        -- at wrong indentation when the group is broken by a parent.
+        rightNeedsParens : Bool
+        rightNeedsParens =
+            breakRight
+                || (case exprr of
+                        LambdaExpression _ ->
+                            True
+
+                        _ ->
+                            False
+                   )
+
+        right : Doc t
+        right =
+            if rightNeedsParens then
+                Pretty.parens rightRaw
+
+            else
+                rightRaw
 
         alwaysBreak : Bool
         alwaysBreak =
@@ -1084,9 +1112,14 @@ prettyOperatorApplication aliases indent symbol dir (Node _ exprl) (Node _ exprr
             left
                 |> Pretty.a Pretty.space
                 |> Pretty.a (Pretty.string symbol)
-                |> Pretty.a (Pretty.nest indent Pretty.line)
-                |> Pretty.a right
-                |> Pretty.align
+                |> Pretty.a Pretty.space
+                |> Pretty.a
+                    (if rightNeedsParens then
+                        right
+
+                     else
+                        Pretty.group right
+                    )
                 |> optionalGroup alwaysBreak
     , alwaysBreak
     )
