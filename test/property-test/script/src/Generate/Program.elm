@@ -180,12 +180,7 @@ expressionGenerator depth t =
                             recordAccessGenerator (depth - 1) t
 
                         12 ->
-                            -- Comparison operators always produce Bool
-                            if t == TBool then
-                                comparisonExpressionGenerator (depth - 1)
-
-                            else
-                                withTypeGenerator (depth - 1) t
+                            withTypeGenerator (depth - 1) t
 
                         13 ->
                             recordUpdateGenerator (depth - 1) t
