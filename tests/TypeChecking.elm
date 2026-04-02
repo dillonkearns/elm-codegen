@@ -102,7 +102,7 @@ suite =
 
 
 
-{- HELPERS COPIED FROM GENRATED STUFF
+{- HELPERS COPIED FROM GENERATED STUFF
 
    At some point we should just use the generated stuff directly.
 
@@ -284,6 +284,101 @@ generatedCode =
                         myTriple : ( Float, (), Int )
                         myTriple =
                             ( 10.5 - 3.2, (), 1 + 2 )
+                        """
+        , test "fn2 passed to typed apply (call_ pattern) does not infinite loop" <|
+            \_ ->
+                let
+                    foldlExpr =
+                        Elm.apply
+                            (Elm.value
+                                { importFrom = [ "List" ]
+                                , name = "foldl"
+                                , annotation =
+                                    Just
+                                        (Type.function
+                                            [ Type.function [ Type.var "a", Type.var "b" ] (Type.var "b")
+                                            , Type.var "b"
+                                            , Type.list (Type.var "a")
+                                            ]
+                                            (Type.var "b")
+                                        )
+                                }
+                            )
+                            [ Elm.fn2
+                                (Arg.var "item")
+                                (Arg.var "acc")
+                                (\item acc -> Elm.Op.plus acc item)
+                            , Elm.int 0
+                            , Elm.list [ Elm.int 1, Elm.int 2, Elm.int 3 ]
+                            ]
+
+                    rendered =
+                        Elm.ToString.expression foldlExpr
+                in
+                -- If we get here without hanging, the bug is fixed.
+                rendered.body
+                    |> String.contains "foldl"
+                    |> Expect.equal True
+        , test "fn passed to typed filter does not infinite loop" <|
+            \_ ->
+                let
+                    filterExpr =
+                        Elm.apply
+                            (Elm.value
+                                { importFrom = [ "List" ]
+                                , name = "filter"
+                                , annotation =
+                                    Just
+                                        (Type.function
+                                            [ Type.function [ Type.var "a" ] Type.bool
+                                            , Type.list (Type.var "a")
+                                            ]
+                                            (Type.list (Type.var "a"))
+                                        )
+                                }
+                            )
+                            [ Elm.fn (Arg.var "x")
+                                (\x -> Elm.Op.gt x (Elm.int 0))
+                            , Elm.list [ Elm.int 1, Elm.int -2, Elm.int 3 ]
+                            ]
+
+                    rendered =
+                        Elm.ToString.expression filterExpr
+                in
+                rendered.body
+                    |> String.contains "filter"
+                    |> Expect.equal True
+        , test "fn2 with foldl renders correct output" <|
+            \_ ->
+                Elm.declaration "summed"
+                    (Elm.apply
+                        (Elm.value
+                            { importFrom = [ "List" ]
+                            , name = "foldl"
+                            , annotation =
+                                Just
+                                    (Type.function
+                                        [ Type.function [ Type.var "a", Type.var "b" ] (Type.var "b")
+                                        , Type.var "b"
+                                        , Type.list (Type.var "a")
+                                        ]
+                                        (Type.var "b")
+                                    )
+                            }
+                        )
+                        [ Elm.fn2
+                            (Arg.var "item")
+                            (Arg.var "acc")
+                            (\item acc -> Elm.Op.plus acc item)
+                        , Elm.int 0
+                        , Elm.list [ Elm.int 1, Elm.int 2, Elm.int 3 ]
+                        ]
+                    )
+                    |> Elm.Expect.declarationAs
+                        """
+                        summed : Int
+                        summed =
+                            List.foldl (\\item acc -> acc + item) 0 [ 1, 2, 3 ]
                         """
         ]
 
