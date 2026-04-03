@@ -1705,10 +1705,38 @@ functionReduced argBaseName toExpression =
                         return.annotation
 
                     Ok returnAnnotation ->
+                        let
+                            -- The arg was created with annotation
+                            -- (Elm.Annotation.var arg1Name), which gets
+                            -- protected by the index into a name like
+                            -- "r_0_1". Look up this protected name in the
+                            -- body's inferences to get the resolved arg type.
+                            protectedArgName : String
+                            protectedArgName =
+                                let
+                                    { type_ } =
+                                        Compiler.getInnerInference newIndex argType
+                                in
+                                case type_ of
+                                    Annotation.GenericType name ->
+                                        name
+
+                                    _ ->
+                                        arg1Name
+
+                            resolvedArgType : Annotation.TypeAnnotation
+                            resolvedArgType =
+                                case Dict.get protectedArgName returnAnnotation.inferences of
+                                    Just inferred ->
+                                        inferred
+
+                                    Nothing ->
+                                        Annotation.GenericType arg1Name
+                        in
                         Ok
                             { type_ =
                                 Annotation.FunctionTypeAnnotation
-                                    (Compiler.nodify (Annotation.GenericType arg1Name))
+                                    (Compiler.nodify resolvedArgType)
                                     (Compiler.nodify
                                         returnAnnotation.type_
                                     )

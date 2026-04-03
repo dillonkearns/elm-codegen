@@ -271,6 +271,42 @@ generatedCode =
                                 ( 1 + 2, x )
                             """
             ]
+        , describe "functionReduced type annotations"
+            [ test "functionReduced record accessor has correct type" <|
+                \_ ->
+                    Elm.declaration "getName"
+                        (Elm.functionReduced "r"
+                            (\r -> Elm.get "name" r)
+                        )
+                        |> Elm.Expect.declarationAs
+                            """
+                            getName : { r_0 | name : name } -> name
+                            getName =
+                                .name
+                            """
+            , test "functionReduced identity has correct type" <|
+                \_ ->
+                    Elm.declaration "myId"
+                        (Elm.functionReduced "x" (\x -> x))
+                        |> Elm.Expect.declarationAs
+                            """
+                            myId : x -> x
+                            myId x =
+                                x
+                            """
+            , test "functionReduced with arithmetic has correct type" <|
+                \_ ->
+                    Elm.declaration "addOne"
+                        (Elm.functionReduced "x"
+                            (\x -> Elm.Op.plus x (Elm.int 1))
+                        )
+                        |> Elm.Expect.declarationAs
+                            """
+                            addOne : Int -> Int
+                            addOne x =
+                                x + 1
+                            """
+            ]
         , test "Triple with mixed Float and Int infers correct types" <|
             \_ ->
                 Elm.declaration "myTriple"
