@@ -439,6 +439,38 @@ generatedCode =
                         myTriple =
                             ( 10.5 - 3.2, (), 1 + 2 )
                         """
+        , test "functionReduced: record accessor constrains arg to extensible record" <|
+            \_ ->
+                Elm.declaration "getName"
+                    (Elm.functionReduced "r" (\r -> Elm.get "name" r))
+                    |> Elm.Expect.declarationAs
+                        """
+                        getName : { r_0 | name : name } -> name
+                        getName =
+                            .name
+                        """
+        , test "functionReduced: arithmetic narrows arg to Int" <|
+            \_ ->
+                Elm.declaration "addOne"
+                    (Elm.functionReduced "x" (\x -> Elm.Op.plus x (Elm.int 1)))
+                    |> Elm.Expect.declarationAs
+                        """
+                        addOne : Int -> Int
+                        addOne x =
+                            x + 1
+                        """
+        , test "functionReduced: unconstrained arg stays polymorphic" <|
+            -- Regression guard: without this, a too-aggressive lookup
+            -- could fabricate a non-generic type for `\r -> r`.
+            \_ ->
+                Elm.declaration "identity_"
+                    (Elm.functionReduced "r" (\r -> r))
+                    |> Elm.Expect.declarationAs
+                        """
+                        identity_ : r -> r
+                        identity_ r =
+                            r
+                        """
         ]
 
 

@@ -1705,10 +1705,29 @@ functionReduced argBaseName toExpression =
                         return.annotation
 
                     Ok returnAnnotation ->
+                        let
+                            protectedArgName : String
+                            protectedArgName =
+                                case (Compiler.getInnerInference newIndex argType).type_ of
+                                    Annotation.GenericType name ->
+                                        name
+
+                                    _ ->
+                                        arg1Name
+
+                            resolvedArgType : Annotation.TypeAnnotation
+                            resolvedArgType =
+                                case Dict.get protectedArgName returnAnnotation.inferences of
+                                    Just inferred ->
+                                        inferred
+
+                                    Nothing ->
+                                        Annotation.GenericType arg1Name
+                        in
                         Ok
                             { type_ =
                                 Annotation.FunctionTypeAnnotation
-                                    (Compiler.nodify (Annotation.GenericType arg1Name))
+                                    (Compiler.nodify resolvedArgType)
                                     (Compiler.nodify
                                         returnAnnotation.type_
                                     )
